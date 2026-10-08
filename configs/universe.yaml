@@ -1,0 +1,363 @@
+# SkData AI — Company Universe Configuration
+# S&P 500 + ADX + DFM
+
+markets:
+  sp500:
+    name: "S&P 500"
+    exchange: "NYSE/NASDAQ"
+    currency: "USD"
+    country: "US"
+    ticker_suffix: ""
+
+  adx:
+    name: "Abu Dhabi Exchange"
+    exchange: "ADX"
+    currency: "AED"
+    country: "UAE"
+    ticker_suffix: ".AD"
+
+  dfm:
+    name: "Dubai Financial Market"
+    exchange: "DFM"
+    currency: "AED"
+    country: "UAE"
+    ticker_suffix: ".DU"
+
+# ADX Companies
+adx_companies:
+  # Banking and Finance
+  - ticker: "FAB.AD"
+    name: "First Abu Dhabi Bank"
+    name_arabic: "بنك أبوظبي الأول"
+    sector: "Financials"
+    industry: "Banks"
+
+  - ticker: "ADCB.AD"
+    name: "Abu Dhabi Commercial Bank"
+    name_arabic: "بنك أبوظبي التجاري"
+    sector: "Financials"
+    industry: "Banks"
+
+  - ticker: "ADIB.AD"
+    name: "Abu Dhabi Islamic Bank"
+    name_arabic: "مصرف أبوظبي الإسلامي"
+    sector: "Financials"
+    industry: "Islamic Banks"
+
+  - ticker: "NBAD.AD"
+    name: "National Bank of Abu Dhabi"
+    name_arabic: "بنك أبوظبي الوطني"
+    sector: "Financials"
+    industry: "Banks"
+
+  - ticker: "CBI.AD"
+    name: "Commercial Bank International"
+    name_arabic: "البنك التجاري الدولي"
+    sector: "Financials"
+    industry: "Banks"
+
+  - ticker: "NBQ.AD"
+    name: "National Bank of Umm Al Qaiwain"
+    name_arabic: "البنك الوطني لأم القيوين"
+    sector: "Financials"
+    industry: "Banks"
+
+  - ticker: "INVEST.AD"
+    name: "Abu Dhabi Investment Company"
+    name_arabic: "شركة أبوظبي للاستثمار"
+    sector: "Financials"
+    industry: "Investment"
+
+  - ticker: "WAHA.AD"
+    name: "Waha Capital"
+    name_arabic: "واحة كابيتال"
+    sector: "Financials"
+    industry: "Investment"
+
+  # Energy
+  - ticker: "ADNOCDIST.AD"
+    name: "ADNOC Distribution"
+    name_arabic: "توزيع أدنوك"
+    sector: "Energy"
+    industry: "Oil & Gas Distribution"
+
+  - ticker: "ADNOCGAS.AD"
+    name: "ADNOC Gas"
+    name_arabic: "أدنوك للغاز"
+    sector: "Energy"
+    industry: "Oil & Gas"
+
+  - ticker: "ADNOCDRILL.AD"
+    name: "ADNOC Drilling"
+    name_arabic: "أدنوك للحفر"
+    sector: "Energy"
+    industry: "Oil & Gas Drilling"
+
+  - ticker: "ADNOCLOG.AD"
+    name: "ADNOC Logistics and Services"
+    name_arabic: "أدنوك للخدمات اللوجستية"
+    sector: "Energy"
+    industry: "Oil & Gas Services"
+
+  - ticker: "TAQA.AD"
+    name: "Abu Dhabi National Energy Company"
+    name_arabic: "شركة أبوظبي الوطنية للطاقة"
+    sector: "Utilities"
+    industry: "Electric Utilities"
+
+  - ticker: "IHC.AD"
+    name: "International Holding Company"
+    name_arabic: "الشركة الدولية القابضة"
+    sector: "Industrials"
+    industry: "Conglomerates"
+
+  - ticker: "FERTIGLOBE.AD"
+    name: "Fertiglobe"
+    name_arabic: "فيرتيجلوب"
+    sector: "Materials"
+    industry: "Fertilizers"
+
+  # Real Estate
+  - ticker: "ALDAR.AD"
+    name: "Aldar Properties"
+    name_arabic: "الدار العقارية"
+    sector: "Real Estate"
+    industry: "Real Estate Development"
+
+  - ticker: "RAKPROP.AD"
+    name: "RAK Properties"
+    name_arabic: "عقارات رأس الخيمة"
+    sector: "Real Estate"
+    industry: "Real Estate Development"
+
+  # Telecom
+  - ticker: "ETISALAT.AD"
+    name: "e& (Etisalat)"
+    name_arabic: "الإمارات للاتصالات"
+    sector: "Communication Services"
+    industry: "Telecom"
+
+  - ticker: "YAHSAT.AD"
+    name: "Al Yah Satellite Communications"
+    name_arabic: "يا سات"
+    sector: "Communication Services"
+    industry: "Satellite"
+
+  # Healthcare
+  - ticker: "PUREHEALTH.AD"
+    name: "Pure Health Holding"
+    name_arabic: "القابضة للصحة النقية"
+    sector: "Healthcare"
+    industry: "Healthcare Services"
+
+  - ticker: "BURJEEL.AD"
+    name: "Burjeel Holdings"
+    name_arabic: "قابضة برجيل"
+    sector: "Healthcare"
+    industry: "Healthcare Services"
+
+  - ticker: "AMANAT.AD"
+    name: "Amanat Holdings"
+    name_arabic: "أمانة القابضة"
+    sector: "Healthcare"
+    industry: "Healthcare & Education"
+
+  # Industry and Food
+  - ticker: "AGTHIA.AD"
+    name: "Agthia Group"
+    name_arabic: "مجموعة أغذية"
+    sector: "Consumer Staples"
+    industry: "Food & Beverages"
+
+  - ticker: "JULPHAR.AD"
+    name: "Gulf Pharmaceutical Industries"
+    name_arabic: "جلفار للصناعات الدوائية"
+    sector: "Healthcare"
+    industry: "Pharmaceuticals"
+
+  - ticker: "ARKAN.AD"
+    name: "Arkan Building Materials"
+    name_arabic: "أركان لمواد البناء"
+    sector: "Materials"
+    industry: "Building Materials"
+
+  - ticker: "RAKCEM.AD"
+    name: "RAK Ceramics"
+    name_arabic: "راك للسيراميك"
+    sector: "Materials"
+    industry: "Ceramics"
+
+  # Insurance
+  - ticker: "ADNIC.AD"
+    name: "Abu Dhabi National Insurance"
+    name_arabic: "التأمين الوطنية أبوظبي"
+    sector: "Financials"
+    industry: "Insurance"
+
+  - ticker: "AFNIC.AD"
+    name: "Al Fujairah National Insurance"
+    name_arabic: "تأمين الفجيرة الوطنية"
+    sector: "Financials"
+    industry: "Insurance"
+
+  - ticker: "SALAMA.AD"
+    name: "Islamic Arab Insurance"
+    name_arabic: "سلامة للتأمين"
+    sector: "Financials"
+    industry: "Insurance"
+
+  # Ports and Logistics
+  - ticker: "ADPORTS.AD"
+    name: "AD Ports Group"
+    name_arabic: "مجموعة موانئ أبوظبي"
+    sector: "Industrials"
+    industry: "Marine Ports"
+
+  - ticker: "SALIK.AD"
+    name: "Salik Company"
+    name_arabic: "شركة سالك"
+    sector: "Industrials"
+    industry: "Toll Roads"
+
+# DFM Companies
+dfm_companies:
+  # Banking
+  - ticker: "ENBD.DU"
+    name: "Emirates NBD"
+    name_arabic: "بنك الإمارات دبي الوطني"
+    sector: "Financials"
+    industry: "Banks"
+
+  - ticker: "DIB.DU"
+    name: "Dubai Islamic Bank"
+    name_arabic: "مصرف دبي الإسلامي"
+    sector: "Financials"
+    industry: "Islamic Banks"
+
+  - ticker: "MASHREQ.DU"
+    name: "Mashreqbank"
+    name_arabic: "بنك المشرق"
+    sector: "Financials"
+    industry: "Banks"
+
+  - ticker: "CBD.DU"
+    name: "Commercial Bank of Dubai"
+    name_arabic: "البنك التجاري لدبي"
+    sector: "Financials"
+    industry: "Banks"
+
+  - ticker: "SHUAA.DU"
+    name: "Shuaa Capital"
+    name_arabic: "شعاع كابيتال"
+    sector: "Financials"
+    industry: "Investment Banking"
+
+  # Real Estate
+  - ticker: "EMAAR.DU"
+    name: "Emaar Properties"
+    name_arabic: "إعمار العقارية"
+    sector: "Real Estate"
+    industry: "Real Estate Development"
+
+  - ticker: "DEYAAR.DU"
+    name: "Deyaar Development"
+    name_arabic: "ديار للتطوير"
+    sector: "Real Estate"
+    industry: "Real Estate Development"
+
+  - ticker: "DAMAC.DU"
+    name: "DAMAC Properties"
+    name_arabic: "داماك العقارية"
+    sector: "Real Estate"
+    industry: "Real Estate Development"
+
+  - ticker: "UNION.DU"
+    name: "Union Properties"
+    name_arabic: "الاتحاد العقارية"
+    sector: "Real Estate"
+    industry: "Real Estate Development"
+
+  - ticker: "GFH.DU"
+    name: "Gulf Finance House"
+    name_arabic: "بيت التمويل الخليجي"
+    sector: "Financials"
+    industry: "Investment"
+
+  # Aviation and Transport
+  - ticker: "AIRARABIA.DU"
+    name: "Air Arabia"
+    name_arabic: "العربية للطيران"
+    sector: "Industrials"
+    industry: "Airlines"
+
+  - ticker: "DPW.DU"
+    name: "DP World"
+    name_arabic: "موانئ دبي العالمية"
+    sector: "Industrials"
+    industry: "Marine Ports"
+
+  # Telecom
+  - ticker: "DU.DU"
+    name: "du Telecom"
+    name_arabic: "دو للاتصالات"
+    sector: "Communication Services"
+    industry: "Telecom"
+
+  # Utilities
+  - ticker: "DEWA.DU"
+    name: "Dubai Electricity and Water Authority"
+    name_arabic: "هيئة كهرباء ومياه دبي"
+    sector: "Utilities"
+    industry: "Electric Utilities"
+
+  - ticker: "EMPOWER.DU"
+    name: "Emirates Central Cooling Systems"
+    name_arabic: "إمباور"
+    sector: "Utilities"
+    industry: "District Cooling"
+
+  # Hospitality
+  - ticker: "DXBINVEST.DU"
+    name: "Dubai Investments"
+    name_arabic: "دبي للاستثمارات"
+    sector: "Financials"
+    industry: "Diversified Investments"
+
+  # Healthcare
+  - ticker: "MEDICLINIC.DU"
+    name: "Mediclinic Middle East"
+    name_arabic: "ميديكلينيك الشرق الأوسط"
+    sector: "Healthcare"
+    industry: "Healthcare Services"
+
+  - ticker: "ASTER.DU"
+    name: "Aster DM Healthcare"
+    name_arabic: "أستر للرعاية الصحية"
+    sector: "Healthcare"
+    industry: "Healthcare Services"
+
+  # Industry
+  - ticker: "TECOM.DU"
+    name: "TECOM Group"
+    name_arabic: "مجموعة تيكوم"
+    sector: "Real Estate"
+    industry: "Free Zone"
+
+  - ticker: "PARKIN.DU"
+    name: "Parkin Company"
+    name_arabic: "باركين"
+    sector: "Industrials"
+    industry: "Parking Management"
+
+  # Insurance
+  - ticker: "ORIENT.DU"
+    name: "Orient Insurance"
+    name_arabic: "أوريانت للتأمين"
+    sector: "Financials"
+    industry: "Insurance"
+
+  - ticker: "WATANIA.DU"
+    name: "National Takaful Company"
+    name_arabic: "وطنية للتكافل"
+    sector: "Financials"
+    industry: "Insurance"

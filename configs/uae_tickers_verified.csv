@@ -1,0 +1,20 @@
+company,ticker,yf_name,price,market_cap,sector,pe_ratio,dividend_yield,profit_margin,roe,revenue_growth,beta,week_52_high,week_52_low
+Salik,SALIK.AE,Salik Company P.J.S.C.,5.25,39374999552,Industrials,26.25,3.46,0.49857,1.30893,-0.119,0.181,6.85,4.96
+Amanat,AMANAT.AE,Amanat Holdings PJSC,1.52,3794084096,Financial Services,16.888887,6.47,0.18486,0.09669,0.247,0.211,1.57,1.1
+Dubai Islamic Bank,DIB.AE,Dubai Islamic Bank P.J.S.C.,7.04,50878861312,Financial Services,7.111111,4.89,0.57715,0.15018,0.017,0.062,10.2,6.97
+Emaar Properties,EMAAR.AE,Emaar Properties PJSC,11.18,98817679360,Real Estate,5.1759257,8.73,0.35779998,0.24211,0.182,0.371,17.25,10.15
+Air Arabia,AIRARABIA.AE,Air Arabia PJSC,4.5,21000148992,Industrials,16.666666,6.52,0.16899,0.17673,-0.034,0.306,6.03,3.85
+DEWA,DEWA.AE,Dubai Electricity and Water Authority (PJSC),2.69,134499999744,Utilities,14.944444,4.59,0.26537,0.10090999,-0.026,0.199,3.15,2.47
+Tecom,TECOM.AE,TECOM Group PJSC,3.26,16300000256,Real Estate,7.581395,5.42,0.71562,0.28259,0.108,0.372,4.15,3.06
+Parkin,PARKIN.AE,Parkin Company P.J.S.C.,6.02,18056611840,Industrials,26.173912,3.57,0.47341,1.3812699,0.136,0.618,6.5,4.38
+Deyaar,DEYAAR.AE,Deyaar Development PJSC,0.718,3141851392,Real Estate,5.1285715,6.62,0.31672,0.11805,0.027,0.315,1.12,0.705
+Shuaa Capital,SHUAA.AE,SHUAA Capital PSC,0.254,929391808,Financial Services,,0.0,-1.3558201,-0.10524,-0.426,0.203,0.308,0.173
+Gulf Finance House,GFH.AE,GFH Bank B.S.C.,1.75,6044917248,Financial Services,10.9375,5.55,0.35107,0.13649,0.059,0.575,2.34,1.67
+Mashreqbank,MASQ.AE,Mashreqbank PSC,319.0,63994531840,Financial Services,8.930571,3.16,0.56402,0.18621,0.234,-0.332,339.0,198.45
+du Telecom,DU.AE,Emirates Integrated Telecommunications Company PJSC,11.98,54304210944,Communication Services,17.617645,5.41,0.18882,0.31264,0.046,0.175,12.8,9.16
+Empower,EMPOWER.AE,Emirates Central Cooling Systems Corporation,1.55,15499999232,Utilities,14.090909,5.63,0.30386,0.31144,-0.027,0.322,1.96,1.48
+CBD,CBD.AE,Commercial Bank of Dubai PSC,9.64,28777250816,Financial Services,8.4561405,6.08,0.64629996,0.20341,0.019,0.072,10.2,8.45
+Commercial Bank Dubai,CBD.AE,Commercial Bank of Dubai PSC,9.64,28777250816,Financial Services,8.4561405,6.08,0.64629996,0.20341,0.019,0.072,10.2,8.45
+Deyaar,DEYAAR.AE,Deyaar Development PJSC,0.718,3141851392,Real Estate,5.1285715,6.62,0.31672,0.11805,0.027,0.315,1.12,0.705
+National Takaful,WATANIA.AE,Watania International Holding PJSC,0.674,167699904,Financial Services,4.4933333,0.0,0.065960005,0.15810001,0.127,0.181,0.777,0.586
+Dubai Financial Market,DFM.AE,Dubai Financial Market P.J.S.C.,1.35,10794280960,Financial Services,16.875,4.71,0.69813,0.07241,0.265,0.235,1.78,1.31
