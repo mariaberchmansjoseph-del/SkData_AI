@@ -1,16 +1,8 @@
 """
-SkData AI — Production Streamlit Demo
-All flaws fixed:
-  1. Currency normalisation (UAE AED → USD)
-  2. Data freshness indicators
-  3. Disclaimer prominence
-  4. SQL injection prevention
-  5. UAE data staleness warnings
-  6. Conversation memory
-  7. Error handling everywhere
-  8. Schema validation
+SkData AI — Production Streamlit Demo v2.0
+Includes: data freshness, quality evaluation,
+user feedback, admin dashboard, all flaws fixed.
 app/streamlit_app.py
-Run: streamlit run app/streamlit_app.py
 """
 
 import sys
@@ -30,15 +22,13 @@ sys.path.insert(0, ".")
 DB_PATH    = "data/processed/skdata.db"
 AED_TO_USD = 3.67
 
-
 # ── PAGE CONFIG ───────────────────────────────────────────────
 st.set_page_config(
-    page_title = "SkData AI",
-    page_icon  = "📊",
-    layout     = "wide",
+    page_title            = "SkData AI",
+    page_icon             = "📊",
+    layout                = "wide",
     initial_sidebar_state = "expanded"
 )
-
 
 # ── DATABASE CHECK ────────────────────────────────────────────
 def db_is_ready() -> bool:
@@ -60,7 +50,7 @@ if not db_is_ready():
     st.title("📊 SkData AI — First Time Setup")
     st.info(
         "Setting up the database. "
-        "This downloads data for 500+ companies. "
+        "Downloads data for 500+ companies. "
         "Takes 10-15 minutes."
     )
     progress_bar = st.progress(0)
@@ -78,7 +68,6 @@ if not db_is_ready():
     except Exception as e:
         st.error(f"Setup failed: {e}")
         st.stop()
-
 
 # ── STYLES ────────────────────────────────────────────────────
 st.markdown("""
@@ -104,18 +93,19 @@ st.markdown("""
     padding:.75rem; border-radius:4px; margin:.5rem 0;
     font-size:.85rem;
   }
-  .fresh-green { color:#16a34a; font-size:.8rem; }
-  .fresh-yellow{ color:#d97706; font-size:.8rem; }
-  .fresh-red   { color:#dc2626; font-size:.8rem; }
+  .info-box {
+    background:#eff6ff; border-left:4px solid #3b82f6;
+    padding:.75rem; border-radius:4px; margin:.5rem 0;
+    font-size:.85rem;
+  }
 </style>
 """, unsafe_allow_html=True)
 
-
 # ── CONSTANTS ─────────────────────────────────────────────────
 FORECAST_KEYWORDS = [
-    "forecast", "predict", "project", "target",
-    "expect", "future", "next quarter", "estimate",
-    "outlook", "guidance", "next year"
+    "forecast","predict","project","target","expect",
+    "future","next quarter","estimate","outlook",
+    "guidance","next year"
 ]
 
 SHORT_DISCLAIMER = (
@@ -140,20 +130,96 @@ FULL_DISCLAIMER = """
 **These projections do not constitute financial advice or
 guarantees of future performance. Actual results may differ
 materially. Past performance is not indicative of future results.**
+
 *Always consult a qualified financial advisor.*
+
 ---
 """
 
+# ── CACHED RESOURCES ──────────────────────────────────────────
+@st.cache_resource
+def get_sql_agent():
+    try:
+        from src.agents.sql_agent import SQLAgent
+        return SQLAgent()
+    except Exception:
+        return None
+
+
+@st.cache_resource
+def get_forecast_agent():
+    try:
+        from src.agents.forecast_agent import ForecastAgent
+        return ForecastAgent()
+    except Exception:
+        return None
+
+
+@st.cache_resource
+def get_judge():
+    try:
+        from src.agents.judge_agent import JudgeAgent
+        return JudgeAgent()
+    except Exception:
+        return None
+
+
+@st.cache_data(ttl=3600)
+def get_companies():
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        rows = conn.execute("""
+            SELECT c.ticker, c.name, c.market,
+                   c.sector, c.country,
+                   m.market_cap, m.current_price,
+                   c.currency
+            FROM companies c
+            LEFT JOIN metrics m ON c.ticker=m.ticker
+            WHERE m.current_price IS NOT NULL
+            ORDER BY
+                CASE WHEN c.country='UAE'
+                THEN m.market_cap/3.67
+                ELSE m.market_cap END DESC
+        """).fetchall()
+        conn.close()
+        return pd.DataFrame(rows, columns=[
+            "ticker","name","market","sector",
+            "country","market_cap","price","currency"
+        ])
+    except Exception:
+        return pd.DataFrame(columns=[
+            "ticker","name","market","sector",
+            "country","market_cap","price","currency"
+        ])
+
+
+@st.cache_data(ttl=3600)
+def get_sector_data():
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        rows = conn.execute("""
+            SELECT sector, market, company_count,
+                   ROUND(total_market_cap/1e12,2),
+                   ROUND(avg_pe,1),
+                   ROUND(avg_profit_margin*100,1),
+                   ROUND(avg_roe*100,1),
+                   ROUND(avg_dividend_yield*100,2)
+            FROM sector_summary
+            WHERE total_market_cap IS NOT NULL
+            ORDER BY total_market_cap DESC
+        """).fetchall()
+        conn.close()
+        return pd.DataFrame(rows, columns=[
+            "sector","market","companies","mcap_t",
+            "avg_pe","avg_margin","avg_roe","avg_yield"
+        ])
+    except Exception:
+        return pd.DataFrame()
+
 
 # ── HELPERS ───────────────────────────────────────────────────
-def fmt(
-    v,
-    prefix   = "$",
-    suffix   = "",
-    decimals = 1,
-    country  = "US"
-) -> str:
-    """Format number with currency conversion for UAE."""
+def fmt(v, prefix="$", suffix="", decimals=1,
+        country="US") -> str:
     if v is None:
         return "N/A"
     try:
@@ -180,29 +246,24 @@ def pct(v) -> str:
         return "N/A"
 
 
-def freshness(last_updated: str) -> str:
-    """Data age indicator with colour coding."""
+def freshness_label(last_updated: str) -> str:
     if not last_updated:
         return "⚪ Data age unknown"
     try:
-        updated = datetime.fromisoformat(
+        updated  = datetime.fromisoformat(
             last_updated[:19]
         )
-        days = (datetime.now() - updated).days
-        if days <= 1:
-            return f"🟢 Updated today"
-        elif days <= 7:
-            return f"🟢 Updated {days}d ago"
-        elif days <= 30:
-            return f"🟡 Updated {days}d ago"
-        else:
-            return f"🔴 Updated {days}d ago — may be stale"
+        days     = (datetime.now() - updated).days
+        if days == 0:  return "🟢 Updated today"
+        if days <= 3:  return f"🟢 Updated {days}d ago"
+        if days <= 7:  return f"🟡 Updated {days}d ago"
+        if days <= 30: return f"🔴 Updated {days}d ago — stale"
+        return f"🔴 Updated {days}d ago — very stale"
     except Exception:
-        return "⚪ Data age unknown"
+        return "⚪ Unknown"
 
 
 def safe_db(query: str, params: tuple = ()) -> list:
-    """Execute parameterised query safely."""
     try:
         conn   = sqlite3.connect(DB_PATH)
         result = conn.execute(query, params).fetchall()
@@ -213,15 +274,14 @@ def safe_db(query: str, params: tuple = ()) -> list:
 
 
 def auto_chart(df: pd.DataFrame, question: str):
-    """Pick and draw best chart automatically."""
     if df is None or df.empty or len(df) < 2:
         return None
-    num_cols = [
+    num_cols  = [
         c for c in df.columns
         if pd.api.types.is_numeric_dtype(df[c])
         and df[c].notna().sum() > 0
     ]
-    str_cols = [
+    str_cols  = [
         c for c in df.columns
         if not pd.api.types.is_numeric_dtype(df[c])
     ]
@@ -232,9 +292,10 @@ def auto_chart(df: pd.DataFrame, question: str):
     df       = df.copy()
     df[x]    = df[x].astype(str).str[:20]
     cols_low = [c.lower() for c in df.columns]
-
-    date_cols = [c for c in cols_low
-                 if "date" in c or "year" in c]
+    date_cols = [
+        c for c in cols_low
+        if "date" in c or "year" in c
+    ]
     if date_cols and num_cols:
         xc = df.columns[cols_low.index(date_cols[0])]
         return px.line(
@@ -243,7 +304,7 @@ def auto_chart(df: pd.DataFrame, question: str):
             color_discrete_sequence=["#3b82f6"]
         )
     color_col = None
-    for cc in ["market", "sector", "country"]:
+    for cc in ["market","sector","country"]:
         if cc in cols_low:
             color_col = df.columns[cols_low.index(cc)]
             break
@@ -265,63 +326,50 @@ def auto_chart(df: pd.DataFrame, question: str):
     return None
 
 
-# ── CACHED DATA ───────────────────────────────────────────────
-@st.cache_resource
-def get_sql_agent():
+def save_feedback(
+    question:   str,
+    sql:        str,
+    rating:     str,
+    comment:    str = "",
+    row_count:  int = 0,
+    latency_ms: int = 0,
+):
     try:
-        from src.agents.sql_agent import SQLAgent
-        return SQLAgent()
+        conn = sqlite3.connect(DB_PATH)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS user_feedback (
+                id         INTEGER PRIMARY KEY,
+                created_at TEXT,
+                question   TEXT,
+                sql        TEXT,
+                rating     TEXT,
+                comment    TEXT,
+                row_count  INTEGER,
+                latency_ms INTEGER
+            )
+        """)
+        conn.execute("""
+            INSERT INTO user_feedback
+            (created_at, question, sql, rating,
+             comment, row_count, latency_ms)
+            VALUES (?,?,?,?,?,?,?)
+        """, (
+            datetime.now().isoformat(),
+            question, sql, rating,
+            comment, row_count, latency_ms,
+        ))
+        conn.commit()
+        conn.close()
     except Exception:
-        return None
+        pass
 
 
-@st.cache_resource
-def get_forecast_agent():
+def refresh_ticker_data(ticker: str) -> dict:
     try:
-        from src.agents.forecast_agent import ForecastAgent
-        return ForecastAgent()
-    except Exception:
-        return None
-
-
-@st.cache_data(ttl=3600)
-def get_companies():
-    rows = safe_db("""
-        SELECT c.ticker, c.name, c.market,
-               c.sector, c.country,
-               m.market_cap, m.current_price,
-               c.currency
-        FROM companies c
-        LEFT JOIN metrics m ON c.ticker = m.ticker
-        WHERE m.current_price IS NOT NULL
-        ORDER BY
-            CASE WHEN c.country='UAE'
-            THEN m.market_cap/3.67
-            ELSE m.market_cap END DESC
-    """)
-    return pd.DataFrame(rows, columns=[
-        "ticker","name","market","sector",
-        "country","market_cap","price","currency"
-    ])
-
-
-@st.cache_data(ttl=3600)
-def get_sector_data():
-    rows = safe_db("""
-        SELECT sector, market, company_count,
-               ROUND(total_market_cap/1e12,2) as mcap_t,
-               ROUND(avg_pe,1) as avg_pe,
-               ROUND(avg_profit_margin*100,1) as avg_margin,
-               ROUND(avg_roe*100,1) as avg_roe,
-               ROUND(avg_dividend_yield*100,2) as avg_yield
-        FROM sector_summary
-        WHERE total_market_cap IS NOT NULL
-        ORDER BY total_market_cap DESC
-    """)
-    return pd.DataFrame(rows, columns=[
-        "sector","market","companies","mcap_t",
-        "avg_pe","avg_margin","avg_roe","avg_yield"
-    ])
+        from src.data.refresher import refresh_ticker
+        return refresh_ticker(ticker)
+    except Exception as e:
+        return {"success": False, "reason": str(e)}
 
 
 # ── SIDEBAR ───────────────────────────────────────────────────
@@ -338,25 +386,25 @@ with st.sidebar:
         "🌍 US vs UAE",
         "🔎 Stock Screener",
         "🔮 Forecasts & Targets",
+        "🛠️ Admin Dashboard",
     ], label_visibility="collapsed")
 
     st.markdown("---")
     companies_df = get_companies()
     us_n  = len(companies_df[
-        companies_df["country"]=="US"
+        companies_df["country"] == "US"
     ])
     uae_n = len(companies_df[
-        companies_df["country"]=="UAE"
+        companies_df["country"] == "UAE"
     ])
     st.metric("S&P 500",     f"{us_n}")
     st.metric("UAE ADX+DFM", f"{uae_n}")
 
-    # Overall data freshness
-    last = safe_db("""
-        SELECT MAX(last_updated) FROM metrics
-    """)
+    last = safe_db(
+        "SELECT MAX(last_updated) FROM metrics"
+    )
     if last and last[0][0]:
-        st.caption(freshness(last[0][0]))
+        st.caption(freshness_label(last[0][0]))
 
     st.caption("Data: yfinance · ADX · DFM")
 
@@ -371,8 +419,9 @@ if page == "🔍 Ask Anything":
         unsafe_allow_html=True
     )
     st.markdown(
-        '<div class="sub-header">Ask any financial question '
-        'about 556 companies — S&P 500, ADX and DFM</div>',
+        '<div class="sub-header">Ask any financial '
+        'question about 556 companies across '
+        'S&P 500, ADX and DFM</div>',
         unsafe_allow_html=True
     )
 
@@ -391,29 +440,33 @@ if page == "🔍 Ask Anything":
     cols = st.columns(4)
     selected_ex = None
     for i, ex in enumerate(examples):
-        if cols[i%4].button(ex, use_container_width=True):
+        if cols[i%4].button(
+            ex, use_container_width=True
+        ):
             selected_ex = ex
 
     st.markdown("---")
 
-    # Session state for conversation memory
-    if "last_sql" not in st.session_state:
-        st.session_state.last_sql = ""
-    if "last_question" not in st.session_state:
-        st.session_state.last_question = ""
+    if "conversation" not in st.session_state:
+        st.session_state.conversation = []
 
     question = st.text_input(
         "Your question",
-        value=selected_ex or "",
-        placeholder="e.g. Which sector has highest ROE?"
+        value       = selected_ex or "",
+        placeholder = (
+            "e.g. Which sector has highest ROE?"
+        ),
+        max_chars   = 300,
     )
 
-    if st.button("🔍 Analyse", type="primary") and question:
+    if st.button(
+        "🔍 Analyse", type="primary"
+    ) and question:
         agent = get_sql_agent()
         if not agent:
             st.error(
-                "SQL agent not available. "
-                "Check your GROQ_API_KEY."
+                "SQL agent unavailable. "
+                "Check GROQ_API_KEY."
             )
         else:
             with st.spinner("Analysing..."):
@@ -421,11 +474,10 @@ if page == "🔍 Ask Anything":
 
             if result.get("error"):
                 st.error(f"Error: {result['error']}")
-                if st.session_state.last_sql:
-                    st.info(
-                        "💡 Try rephrasing your question "
-                        "or use one of the example queries."
-                    )
+                st.info(
+                    "💡 Try rephrasing or use "
+                    "a quick example above."
+                )
 
             elif result.get("rows"):
                 df  = pd.DataFrame(
@@ -449,18 +501,36 @@ if page == "🔍 Ask Anything":
                     f"{result['latency_ms']}ms"
                 )
 
-                with st.expander("🔍 View SQL query"):
+                with st.expander("🔍 View SQL"):
                     st.markdown(
                         f'<div class="sql-box">'
                         f'{result["sql"]}</div>',
                         unsafe_allow_html=True
                     )
 
-                # Store for conversation memory
-                st.session_state.last_sql      = result["sql"]
-                st.session_state.last_question = question
+                # Judge evaluation
+                judge  = get_judge()
+                if judge:
+                    eval_r = judge.evaluate(
+                        question = question,
+                        sql      = result["sql"],
+                        columns  = result["columns"],
+                        rows     = result["rows"],
+                        latency  = result["latency_ms"],
+                    )
+                    score_icon = (
+                        "🟢" if eval_r["score"] >= 0.8
+                        else "🟡"
+                        if eval_r["score"] >= 0.6
+                        else "🔴"
+                    )
+                    st.caption(
+                        f"{score_icon} Answer quality: "
+                        f"{eval_r['score']:.0%} — "
+                        f"{eval_r.get('reason','')[:60]}"
+                    )
 
-                # Forecast disclaimer if needed
+                # Forecast disclaimer
                 if any(
                     kw in question.lower()
                     for kw in FORECAST_KEYWORDS
@@ -470,10 +540,64 @@ if page == "🔍 Ask Anything":
                         f'{SHORT_DISCLAIMER}</div>',
                         unsafe_allow_html=True
                     )
+
+                # Feedback
+                st.markdown("---")
+                st.caption("**Was this answer helpful?**")
+                fb1, fb2, fb3 = st.columns([1,1,6])
+                fkey = question[:15].replace(" ","_")
+
+                if fb1.button(
+                    "👍", key=f"pos_{fkey}"
+                ):
+                    save_feedback(
+                        question   = question,
+                        sql        = result["sql"],
+                        rating     = "positive",
+                        row_count  = len(result["rows"]),
+                        latency_ms = result["latency_ms"],
+                    )
+                    st.success("Thanks! 👍")
+
+                if fb2.button(
+                    "👎", key=f"neg_{fkey}"
+                ):
+                    save_feedback(
+                        question   = question,
+                        sql        = result["sql"],
+                        rating     = "negative",
+                        row_count  = len(result["rows"]),
+                        latency_ms = result["latency_ms"],
+                    )
+                    st.info(
+                        "Thanks — we will use this "
+                        "to improve."
+                    )
+
+                # Store conversation
+                st.session_state.conversation.append({
+                    "question": question,
+                    "rows":     len(result["rows"]),
+                })
+
+                if len(
+                    st.session_state.conversation
+                ) > 1:
+                    with st.expander(
+                        f"💬 History "
+                        f"({len(st.session_state.conversation)} queries)"
+                    ):
+                        for turn in reversed(
+                            st.session_state
+                            .conversation[:-1]
+                        ):
+                            st.caption(
+                                f"→ {turn['question']} "
+                                f"({turn['rows']} rows)"
+                            )
             else:
                 st.warning(
-                    "No results found. "
-                    "Try rephrasing your question."
+                    "No results. Try rephrasing."
                 )
                 with st.expander("View SQL"):
                     st.code(
@@ -518,8 +642,8 @@ elif page == "🏢 Company Explorer":
                m.analyst_count, m.last_updated,
                c.data_quality
         FROM companies c
-        LEFT JOIN metrics m ON c.ticker = m.ticker
-        WHERE c.ticker = ?
+        LEFT JOIN metrics m ON c.ticker=m.ticker
+        WHERE c.ticker=?
     """, (ticker,))
 
     if row:
@@ -530,38 +654,70 @@ elif page == "🏢 Company Explorer":
         st.subheader(f"{m[0]} ({ticker})")
         st.caption(f"{m[3]} · {m[1]} · {m[2] or ''}")
 
+        # Freshness + refresh
+        fresh_col, btn_col = st.columns([4,1])
+        fresh_col.caption(freshness_label(m[34]))
+
+        stale_days = 999
+        if m[34]:
+            try:
+                updated    = datetime.fromisoformat(
+                    m[34][:19]
+                )
+                stale_days = (
+                    datetime.now() - updated
+                ).days
+            except Exception:
+                pass
+
+        if stale_days >= 7 and country == "US":
+            if btn_col.button(
+                "🔄 Refresh", key=f"ref_{ticker}"
+            ):
+                with st.spinner(
+                    f"Refreshing {ticker}..."
+                ):
+                    r = refresh_ticker_data(ticker)
+                if r.get("success"):
+                    st.success(
+                        f"Updated! "
+                        f"Price: ${r['price']:.2f}"
+                    )
+                    st.cache_data.clear()
+                    st.rerun()
+                else:
+                    st.warning(
+                        f"Refresh failed: "
+                        f"{r.get('reason','')}"
+                    )
+
         # Data quality warnings
         if m[35] == "manual":
             st.markdown(
                 '<div class="warn-box">'
-                '⚠️ <b>Manual Data:</b> This company uses '
-                'manually compiled data from October 2026. '
-                'Live market data unavailable for this '
-                'exchange. Verify figures before use.'
+                '⚠️ <b>Manual Data:</b> Compiled from '
+                'ADX/DFM official sources (Oct 2026). '
+                'Live data unavailable. '
+                'Verify before use.'
                 '</div>',
                 unsafe_allow_html=True
             )
-        elif m[35] == "partial":
-            st.caption(
-                "ℹ️ Partial data — some metrics may be missing"
-            )
-
-        # Freshness indicator
-        st.caption(freshness(m[34]))
 
         if m[6]:
             st.caption(m[6][:200])
         st.markdown("---")
 
-        # Key metrics — with currency note for UAE
-        currency_note = " (USD equiv.)" if country=="UAE" else ""
+        # Metrics
+        currency_note = (
+            " (USD equiv.)" if country=="UAE" else ""
+        )
         c1,c2,c3,c4,c5 = st.columns(5)
         c1.metric(
             f"Price ({curr})",
             f"{m[8]:.2f}" if m[8] else "N/A"
         )
         c2.metric(
-            f"Market Cap{currency_note}",
+            f"MCap{currency_note}",
             fmt(m[9], country=country)
         )
         c3.metric("P/E",
@@ -592,27 +748,27 @@ elif page == "🏢 Company Explorer":
 
         if m[31] or m[32]:
             st.markdown("#### Analyst Consensus")
-            a1,a2,a3 = st.columns(3)
+            a1,a2,a3,a4 = st.columns(4)
             a1.metric("Target",
                       fmt(m[31], country=country))
             a2.metric("Rating",
                       (m[32] or "N/A").title())
             a3.metric("Analysts", m[33] or "N/A")
-
             if m[31] and m[8]:
                 upside = round(
-                    (m[31]-m[8])/m[8]*100, 1
+                    (m[31]-m[8])/m[8]*100,1
                 )
-                color = "green" if upside > 0 else "red"
-                st.caption(
-                    f"**{upside:+.1f}% to target**"
+                a4.metric(
+                    "Upside",
+                    f"{upside:+.1f}%",
+                    delta=f"{upside:+.1f}%"
                 )
 
         # Revenue chart
         fin = safe_db("""
             SELECT fiscal_year,
-                   ROUND(revenue/1e9, 2),
-                   ROUND(net_income/1e9, 2)
+                   ROUND(revenue/1e9,2),
+                   ROUND(net_income/1e9,2)
             FROM financials WHERE ticker=?
             ORDER BY fiscal_year
         """, (ticker,))
@@ -640,18 +796,20 @@ elif page == "🏢 Company Explorer":
         """, (ticker,))
         if prices:
             pdf = pd.DataFrame(
-                prices, columns=["Date", "Price"]
+                prices, columns=["Date","Price"]
             )
             fig2 = px.line(
                 pdf, x="Date", y="Price",
                 title=f"{ticker} 5-Year Price ({curr})",
                 color_discrete_sequence=["#8b5cf6"]
             )
-            st.plotly_chart(fig2, use_container_width=True)
-        elif country == "UAE" and m[35] == "manual":
+            st.plotly_chart(
+                fig2, use_container_width=True
+            )
+        elif m[35] == "manual":
             st.info(
-                "Price history not available for "
-                "manually compiled companies."
+                "Price history unavailable "
+                "for manually compiled companies."
             )
 
 
@@ -661,13 +819,14 @@ elif page == "🏢 Company Explorer":
 elif page == "⚖️  Compare":
 
     st.markdown(
-        '<div class="main-header">⚖️ Compare Companies</div>',
+        '<div class="main-header">⚖️ Compare</div>',
         unsafe_allow_html=True
     )
-    st.info(
-        "ℹ️ Market cap values are shown in USD for "
-        "fair comparison. UAE figures converted from AED "
-        f"at {AED_TO_USD} AED/USD."
+    st.markdown(
+        '<div class="info-box">ℹ️ Market caps shown '
+        f'in USD. UAE figures converted from AED '
+        f'at {AED_TO_USD} AED/USD.</div>',
+        unsafe_allow_html=True
     )
 
     companies_df = get_companies()
@@ -676,15 +835,17 @@ elif page == "⚖️  Compare":
         for r in companies_df.itertuples()
     ]
 
-    col1,col2,col3 = st.columns(3)
-    ca = col1.selectbox("Company A", options, index=0)
-    cb = col2.selectbox("Company B", options, index=1)
-    cc = col3.selectbox(
-        "Company C (optional)",
-        ["None"] + options
+    c1,c2,c3 = st.columns(3)
+    ca = c1.selectbox("Company A", options, index=0)
+    cb = c2.selectbox("Company B", options, index=1)
+    cc = c3.selectbox(
+        "Company C (optional)", ["None"]+options
     )
 
-    tickers = [ca.split(" — ")[0], cb.split(" — ")[0]]
+    tickers = [
+        ca.split(" — ")[0],
+        cb.split(" — ")[0]
+    ]
     if cc != "None":
         tickers.append(cc.split(" — ")[0])
 
@@ -692,7 +853,7 @@ elif page == "⚖️  Compare":
     for t in tickers:
         r = safe_db("""
             SELECT c.ticker, c.name, c.market,
-                   c.country,
+                   c.country, c.currency,
                    m.current_price,
                    CASE WHEN c.country='UAE'
                      THEN ROUND(m.market_cap/3.67/1e9,1)
@@ -703,8 +864,7 @@ elif page == "⚖️  Compare":
                    m.revenue_growth, m.debt_to_equity,
                    m.dividend_yield, m.beta,
                    m.free_cash_flow, m.eps,
-                   m.analyst_rating, m.analyst_target,
-                   c.currency
+                   m.analyst_rating, m.analyst_target
             FROM companies c
             LEFT JOIN metrics m ON c.ticker=m.ticker
             WHERE c.ticker=?
@@ -714,11 +874,11 @@ elif page == "⚖️  Compare":
 
     if rows:
         labels = [
-            "Ticker","Name","Market","Country",
-            "Price","MCap (USD $B)","P/E","Fwd P/E",
+            "Ticker","Name","Market","Country","Currency",
+            "Price","MCap(USD $B)","P/E","Fwd P/E",
             "Margin","ROE","ROA","Rev Growth",
             "D/E","Div Yield","Beta",
-            "FCF","EPS","Rating","Target","Currency"
+            "FCF","EPS","Rating","Target"
         ]
         pct_set   = {
             "Margin","ROE","ROA","Rev Growth","Div Yield"
@@ -733,15 +893,17 @@ elif page == "⚖️  Compare":
             for row in rows:
                 val     = row[i]
                 country = row[3]
-                curr    = row[19] or "USD"
+                curr    = row[4] or "USD"
                 if label in pct_set:
                     val = pct(val)
-                elif label == "MCap (USD $B)":
+                elif label == "MCap(USD $B)":
+                    val = f"${val}B" if val else "N/A"
+                elif label == "Price":
                     val = (
-                        f"${val}B (USD)"
+                        f"{val:.2f} {curr}"
                         if val else "N/A"
                     )
-                elif label in ["Price","Target"]:
+                elif label == "Target":
                     val = (
                         f"{val:.2f} {curr}"
                         if val else "N/A"
@@ -762,21 +924,20 @@ elif page == "⚖️  Compare":
             "revenue_growth","debt_to_equity",
             "dividend_yield","beta"
         ])
-
         chart_data = []
         for t in tickers:
             r = safe_db(
-                f"SELECT c.name, c.country, m.{metric_sel} "
+                f"SELECT c.name, c.country, "
+                f"m.{metric_sel} "
                 f"FROM companies c JOIN metrics m "
-                f"ON c.ticker=m.ticker WHERE c.ticker=?",
-                (t,)
+                f"ON c.ticker=m.ticker "
+                f"WHERE c.ticker=?", (t,)
             )
             if r and r[0][2]:
                 chart_data.append({
                     "Company": r[0][0][:20],
-                    "Value":   round(r[0][2], 4)
+                    "Value":   round(r[0][2],4)
                 })
-
         if chart_data:
             fig = px.bar(
                 pd.DataFrame(chart_data),
@@ -800,16 +961,21 @@ elif page == "📈 Sector Analysis":
     )
 
     sector_df = get_sector_data()
+    if sector_df.empty:
+        st.warning("Sector data not available.")
+        st.stop()
+
     mf = st.radio(
         "Market", ["All","SP500","UAE"], horizontal=True
     )
     if mf != "All":
-        sector_df = sector_df[sector_df["market"]==mf]
+        sector_df = sector_df[
+            sector_df["market"] == mf
+        ]
 
     fig1 = px.bar(
         sector_df.head(15),
-        x="sector", y="mcap_t",
-        color="market",
+        x="sector", y="mcap_t", color="market",
         title="Total Market Cap by Sector ($T)",
         color_discrete_sequence=["#3b82f6","#f59e0b"]
     )
@@ -819,8 +985,9 @@ elif page == "📈 Sector Analysis":
     c1,c2 = st.columns(2)
     fig2 = px.bar(
         sector_df.dropna(subset=["avg_margin"])
-                 .sort_values("avg_margin",ascending=False)
-                 .head(12),
+                 .sort_values(
+                     "avg_margin", ascending=False
+                 ).head(12),
         x="sector", y="avg_margin",
         title="Avg Profit Margin % by Sector",
         color_discrete_sequence=["#10b981"]
@@ -847,13 +1014,14 @@ elif page == "📈 Sector Analysis":
 elif page == "🌍 US vs UAE":
 
     st.markdown(
-        '<div class="main-header">🌍 US vs UAE Markets</div>',
+        '<div class="main-header">🌍 US vs UAE</div>',
         unsafe_allow_html=True
     )
-    st.info(
-        f"ℹ️ All values in USD. "
-        f"UAE figures converted from AED "
-        f"at {AED_TO_USD} AED/USD for fair comparison."
+    st.markdown(
+        '<div class="info-box">ℹ️ All values in USD. '
+        f'UAE figures converted from AED '
+        f'at {AED_TO_USD} AED/USD.</div>',
+        unsafe_allow_html=True
     )
 
     overview = safe_db("""
@@ -863,15 +1031,16 @@ elif page == "🌍 US vs UAE":
                    CASE WHEN c.country='UAE'
                    THEN m.market_cap/3.67
                    ELSE m.market_cap END
-               )/1e12, 2) as mcap_usd_t,
-               ROUND(AVG(CASE WHEN m.pe_ratio BETWEEN 0 AND 100
-                   THEN m.pe_ratio END), 1) as avg_pe,
-               ROUND(AVG(m.profit_margin)*100, 1) as avg_margin,
-               ROUND(AVG(m.roe)*100, 1) as avg_roe,
-               ROUND(AVG(m.revenue_growth)*100, 1) as avg_growth,
-               ROUND(AVG(m.dividend_yield)*100, 2) as avg_yield
+               )/1e12,2) as mcap_usd_t,
+               ROUND(AVG(CASE
+                   WHEN m.pe_ratio BETWEEN 0 AND 100
+                   THEN m.pe_ratio END),1) as avg_pe,
+               ROUND(AVG(m.profit_margin)*100,1),
+               ROUND(AVG(m.roe)*100,1),
+               ROUND(AVG(m.revenue_growth)*100,1),
+               ROUND(AVG(m.dividend_yield)*100,2)
         FROM companies c
-        JOIN metrics m ON c.ticker = m.ticker
+        JOIN metrics m ON c.ticker=m.ticker
         WHERE m.current_price IS NOT NULL
         GROUP BY c.country
     """)
@@ -890,17 +1059,16 @@ elif page == "🌍 US vs UAE":
         )
 
         c1,c2 = st.columns(2)
-        comparisons = [
+        metrics = [
             ("P/E Ratio",       "pe_ratio",      1),
-            ("Profit Margin %", "profit_margin", 100),
-            ("ROE %",           "roe",           100),
-            ("Rev Growth %",    "revenue_growth",100),
+            ("Profit Margin%",  "profit_margin", 100),
+            ("ROE%",            "roe",           100),
+            ("Rev Growth%",     "revenue_growth",100),
         ]
-        for i, (label, metric, mult) in \
-                enumerate(comparisons):
+        for i,(label,metric,mult) in enumerate(metrics):
             r = safe_db(f"""
                 SELECT c.country,
-                       ROUND(AVG(m.{metric})*{mult}, 2)
+                       ROUND(AVG(m.{metric})*{mult},2)
                 FROM companies c JOIN metrics m
                 ON c.ticker=m.ticker
                 WHERE m.{metric} IS NOT NULL
@@ -908,7 +1076,7 @@ elif page == "🌍 US vs UAE":
                 GROUP BY c.country
             """)
             if r:
-                df = pd.DataFrame(
+                df  = pd.DataFrame(
                     r, columns=["Country","Value"]
                 )
                 fig = px.bar(
@@ -927,13 +1095,11 @@ elif page == "🌍 US vs UAE":
                         fig, use_container_width=True
                     )
 
-    # UAE data note
     st.markdown("---")
     st.caption(
-        "⚠️ UAE data: 19 companies have live prices "
-        f"(Yahoo Finance .AE tickers). "
-        "23 companies use manually compiled data "
-        "from October 2026."
+        "⚠️ UAE: 19 companies have live prices. "
+        "34 companies use manually compiled "
+        "data from October 2026."
     )
 
 
@@ -953,33 +1119,34 @@ elif page == "🔎 Stock Screener":
     c1,c2,c3 = st.columns(3)
     with c1:
         st.markdown("**Valuation**")
-        pe_max  = st.slider("Max P/E",  0, 100, 50)
-        pb_max  = st.slider("Max P/B",  0,  20, 10)
+        pe_max  = st.slider("Max P/E",   0, 100, 50)
+        pb_max  = st.slider("Max P/B",   0,  20, 10)
     with c2:
         st.markdown("**Profitability**")
-        margin_min = st.slider("Min Margin %",  0, 50,  0)
-        roe_min    = st.slider("Min ROE %",     0, 50,  0)
-        growth_min = st.slider("Min Growth %",-20,100,  0)
+        margin_min = st.slider("Min Margin%", 0, 50,  0)
+        roe_min    = st.slider("Min ROE%",    0, 50,  0)
+        growth_min = st.slider("Min Growth%",-20,100, 0)
     with c3:
         st.markdown("**Other**")
-        div_min  = st.slider("Min Div Yield %", 0, 10, 0)
+        div_min  = st.slider("Min Yield%", 0, 10, 0)
         beta_max = st.slider("Max Beta", 0.0, 5.0, 5.0)
         market   = st.multiselect(
             "Market",
             ["SP500","ADX","DFM"],
             default=["SP500","ADX","DFM"]
         )
-        sectors = st.multiselect("Sectors (all)", [
-            "Technology","Financials","Healthcare",
-            "Consumer Discretionary","Industrials",
-            "Energy","Real Estate","Utilities",
-            "Materials","Communication Services",
-            "Consumer Staples"
-        ])
+        sectors  = st.multiselect(
+            "Sectors (all)", [
+                "Technology","Financials","Healthcare",
+                "Consumer Discretionary","Industrials",
+                "Energy","Real Estate","Utilities",
+                "Materials","Communication Services",
+                "Consumer Staples"
+            ]
+        )
 
     if st.button("🔎 Screen", type="primary"):
-
-        # FIXED: Parameterised query — no SQL injection
+        # Parameterised — no SQL injection
         conditions = [
             "m.pe_ratio BETWEEN 0 AND ?",
             "m.pb_ratio BETWEEN 0 AND ?",
@@ -997,44 +1164,40 @@ elif page == "🔎 Stock Screener":
             float(growth_min)/100,
             float(div_min)/100,
         ]
-
         if beta_max < 5.0:
             conditions.append(
                 "(m.beta <= ? OR m.beta IS NULL)"
             )
             params.append(float(beta_max))
-
         if market:
             ph = ",".join("?"*len(market))
             conditions.append(f"c.market IN ({ph})")
             params.extend(market)
-
         if sectors:
             ph = ",".join("?"*len(sectors))
             conditions.append(f"c.sector IN ({ph})")
             params.extend(sectors)
 
         where = " AND ".join(conditions)
-
         result = safe_db(f"""
             SELECT c.ticker, c.name, c.market,
                    c.sector, c.country,
-                   ROUND(m.current_price, 2) as price,
+                   ROUND(m.current_price,2),
                    c.currency,
                    CASE WHEN c.country='UAE'
                      THEN ROUND(m.market_cap/3.67/1e9,1)
                      ELSE ROUND(m.market_cap/1e9,1)
                    END as mcap_usd_b,
-                   ROUND(m.pe_ratio, 1) as pe,
-                   ROUND(m.pb_ratio, 2) as pb,
-                   ROUND(m.profit_margin*100, 1) as margin,
-                   ROUND(m.roe*100, 1) as roe,
-                   ROUND(m.revenue_growth*100, 1) as growth,
-                   ROUND(m.dividend_yield*100, 2) as yield,
-                   ROUND(m.beta, 2) as beta,
-                   m.analyst_rating as rating
+                   ROUND(m.pe_ratio,1),
+                   ROUND(m.pb_ratio,2),
+                   ROUND(m.profit_margin*100,1),
+                   ROUND(m.roe*100,1),
+                   ROUND(m.revenue_growth*100,1),
+                   ROUND(m.dividend_yield*100,2),
+                   ROUND(m.beta,2),
+                   m.analyst_rating
             FROM companies c
-            JOIN metrics m ON c.ticker = m.ticker
+            JOIN metrics m ON c.ticker=m.ticker
             WHERE {where}
             ORDER BY mcap_usd_b DESC
             LIMIT 100
@@ -1054,19 +1217,17 @@ elif page == "🔎 Stock Screener":
             st.download_button(
                 "📥 Download CSV",
                 df.to_csv(index=False),
-                "screener_results.csv",
-                "text/csv"
+                "screener_results.csv","text/csv"
             )
-            if any(
-                r[4]=="UAE" for r in result
-            ):
+            if any(r[4]=="UAE" for r in result):
                 st.caption(
-                    f"⚠️ UAE market caps converted from AED "
-                    f"to USD at {AED_TO_USD} AED/USD"
+                    f"⚠️ UAE market caps converted "
+                    f"from AED to USD at {AED_TO_USD}"
                 )
         else:
             st.warning(
-                "No companies match. Try relaxing filters."
+                "No companies match. "
+                "Try relaxing filters."
             )
 
 
@@ -1076,14 +1237,15 @@ elif page == "🔎 Stock Screener":
 elif page == "🔮 Forecasts & Targets":
 
     st.markdown(
-        '<div class="main-header">🔮 Forecasts & Targets</div>',
+        '<div class="main-header">'
+        '🔮 Forecasts & Targets</div>',
         unsafe_allow_html=True
     )
 
-    # FIXED: Disclaimer FIRST before any numbers
+    # Disclaimer FIRST
     st.error(
         "📋 **EDUCATIONAL USE ONLY — NOT FINANCIAL ADVICE**  "
-        "All projections are mathematical extrapolations of "
+        "Projections are mathematical extrapolations of "
         "historical data. Do not make investment decisions "
         "based on this tool. Always consult a qualified "
         "financial advisor."
@@ -1096,13 +1258,12 @@ elif page == "🔮 Forecasts & Targets":
         for r in companies_df.itertuples()
     ]
 
-    tab1, tab2, tab3 = st.tabs([
+    tab1,tab2,tab3 = st.tabs([
         "📊 Single Company",
         "🏆 Top Opportunities",
         "🏭 Sector Consensus"
     ])
 
-    # ── Tab 1 ─────────────────────────────────────────────
     with tab1:
         selected = st.selectbox(
             "Select Company", options, key="fc1"
@@ -1114,23 +1275,30 @@ elif page == "🔮 Forecasts & Targets":
             st.error("Forecast agent unavailable.")
         else:
             c = fa.get_analyst_consensus(ticker)
-
             if c:
                 country = c.get("country","US")
-                curr    = "AED" if country=="UAE" else "USD"
+                curr    = "AED" if country=="UAE" \
+                          else "USD"
 
-                st.subheader(f"{c['name']} ({ticker})")
+                st.subheader(
+                    f"{c['name']} ({ticker})"
+                )
                 st.caption(
                     f"{c['market']} · {c['sector']}"
                 )
 
                 if country == "UAE":
-                    st.info(
-                        f"ℹ️ Price and target shown in AED. "
-                        f"Market cap converted to USD."
+                    st.markdown(
+                        '<div class="info-box">'
+                        'ℹ️ Price and target in AED. '
+                        'Market cap converted to USD.'
+                        '</div>',
+                        unsafe_allow_html=True
                     )
 
-                st.markdown("### 📍 Price vs Analyst Target")
+                st.markdown(
+                    "### 📍 Price vs Analyst Target"
+                )
                 col1,col2,col3,col4 = st.columns(4)
                 col1.metric(
                     f"Price ({curr})",
@@ -1150,31 +1318,26 @@ elif page == "🔮 Forecasts & Targets":
                     "Consensus",
                     c["analyst_rating"],
                     help=(
-                        f"Based on "
                         f"{c['analyst_count']} analysts"
                     )
                 )
 
-                # 52-week range
                 low  = c["week_52_low"]
                 high = c["week_52_high"]
                 curr_p = c["current_price"]
                 if low and high and high > low:
-                    pos = (
-                        (curr_p-low)/(high-low)*100
-                    )
+                    pos = (curr_p-low)/(high-low)*100
                     st.markdown("### 📏 52-Week Range")
                     st.progress(
                         int(min(pos,100)),
                         text=(
                             f"{low:.2f} ──── "
-                            f"Current: {curr_p:.2f} "
-                            f"({pos:.0f}%) ──── {high:.2f} "
-                            f"({curr})"
+                            f"{curr_p:.2f} "
+                            f"({pos:.0f}%) ──── "
+                            f"{high:.2f} ({curr})"
                         )
                     )
 
-                # EPS
                 st.markdown("### 💰 EPS Analysis")
                 c1,c2,c3,c4 = st.columns(4)
                 c1.metric("Trailing EPS",
@@ -1187,7 +1350,6 @@ elif page == "🔮 Forecasts & Targets":
                           f"{c['pe_forward']:.1f}"
                           if c['pe_forward'] else "N/A")
 
-                # Revenue projection
                 st.markdown("### 🔮 Revenue Projection")
                 proj = fa.project_revenue(ticker, 4)
 
@@ -1200,10 +1362,12 @@ elif page == "🔮 Forecasts & Targets":
                             p["revenue_b"] for p in proj
                         ],
                         "Upper ($B)": [
-                            p["revenue_upper_b"] for p in proj
+                            p["revenue_upper_b"]
+                            for p in proj
                         ],
                         "Lower ($B)": [
-                            p["revenue_lower_b"] for p in proj
+                            p["revenue_lower_b"]
+                            for p in proj
                         ],
                         "Confidence": [
                             p["confidence_label"]
@@ -1228,7 +1392,8 @@ elif page == "🔮 Forecasts & Targets":
                         line=dict(
                             color="rgba(59,130,246,0.2)"
                         ),
-                        fillcolor="rgba(59,130,246,0.1)",
+                        fillcolor=
+                        "rgba(59,130,246,0.1)",
                         showlegend=False
                     ))
                     fig.add_trace(go.Scatter(
@@ -1243,8 +1408,8 @@ elif page == "🔮 Forecasts & Targets":
                     ))
                     fig.update_layout(
                         title=(
-                            f"{ticker} Revenue Projection "
-                            f"(Estimated)"
+                            f"{ticker} Revenue "
+                            f"Projection (Estimated)"
                         ),
                         yaxis_title="Revenue ($B)"
                     )
@@ -1257,8 +1422,9 @@ elif page == "🔮 Forecasts & Targets":
                     )
                     st.caption(
                         f"Growth rate used: "
-                        f"{proj[0]['growth_rate_used']}% "
-                        f"annually (trailing 12 months)"
+                        f"{proj[0]['growth_rate_used']}%"
+                        f" annually · "
+                        f"Trained on annual data only"
                     )
 
                 st.markdown("### 📝 Summary")
@@ -1275,12 +1441,12 @@ elif page == "🔮 Forecasts & Targets":
                 unsafe_allow_html=True
             )
 
-    # ── Tab 2 ─────────────────────────────────────────────
     with tab2:
         st.markdown("### 🏆 Highest Analyst Upside")
         c1,c2,c3 = st.columns(3)
         mkt   = c1.selectbox(
-            "Market",["SP500","ADX","DFM"],key="opp_mkt"
+            "Market",["SP500","ADX","DFM"],
+            key="opp_mkt"
         )
         minup = c2.slider(
             "Min Upside%",5,50,15,key="opp_up"
@@ -1288,8 +1454,7 @@ elif page == "🔮 Forecasts & Targets":
         mina  = c3.slider(
             "Min Analysts",1,20,5,key="opp_ana"
         )
-
-        fa   = get_forecast_agent()
+        fa    = get_forecast_agent()
         if fa:
             opps = fa.get_top_opportunities(
                 mkt, minup, mina
@@ -1311,16 +1476,14 @@ elif page == "🔮 Forecasts & Targets":
                 )
             else:
                 st.info("No opportunities found.")
-
         st.markdown(
             f'<div class="disc-box">'
             f'{SHORT_DISCLAIMER}</div>',
             unsafe_allow_html=True
         )
 
-    # ── Tab 3 ─────────────────────────────────────────────
     with tab3:
-        st.markdown("### 🏭 Sector Analyst Consensus")
+        st.markdown("### 🏭 Sector Consensus")
         c1,c2 = st.columns(2)
         sector_sel = c1.selectbox("Sector", [
             "Technology","Financials","Healthcare",
@@ -1332,17 +1495,19 @@ elif page == "🔮 Forecasts & Targets":
         mkt_sel = c2.selectbox(
             "Market",["SP500"],key="sec_mkt"
         )
-
         fa = get_forecast_agent()
         if fa:
             sec_df = fa.get_sector_consensus(
                 sector_sel, mkt_sel
             )
             if not sec_df.empty:
-                rc = sec_df["Rating"].value_counts()
+                rc  = sec_df["Rating"].value_counts()
                 fig = px.pie(
                     values=rc.values, names=rc.index,
-                    title=f"{sector_sel} Rating Distribution",
+                    title=(
+                        f"{sector_sel} "
+                        f"Rating Distribution"
+                    ),
                     hole=0.4,
                     color_discrete_sequence=
                     px.colors.qualitative.Set2
@@ -1368,9 +1533,180 @@ elif page == "🔮 Forecasts & Targets":
                 st.info(
                     f"No analyst data for {sector_sel}."
                 )
-
         st.markdown(
             f'<div class="disc-box">'
             f'{SHORT_DISCLAIMER}</div>',
             unsafe_allow_html=True
         )
+
+
+# ══════════════════════════════════════════════════════════════
+# PAGE 8 — ADMIN DASHBOARD
+# ══════════════════════════════════════════════════════════════
+elif page == "🛠️ Admin Dashboard":
+
+    st.markdown(
+        '<div class="main-header">'
+        '🛠️ Admin Dashboard</div>',
+        unsafe_allow_html=True
+    )
+
+    tab1,tab2,tab3 = st.tabs([
+        "📊 Data Quality",
+        "⭐ Answer Quality",
+        "💬 User Feedback"
+    ])
+
+    # ── Tab 1: Data Quality ───────────────────────────
+    with tab1:
+        st.markdown("### 📊 Data Quality Monitor")
+
+        try:
+            from src.data.quality_checks import (
+                get_quality_summary, run_sanity_checks
+            )
+            summary = get_quality_summary()
+            if summary:
+                c1,c2,c3,c4 = st.columns(4)
+                c1.metric(
+                    "Total Companies",
+                    summary["total_companies"]
+                )
+                c2.metric(
+                    "Fresh (7d)",
+                    f"{summary['fresh_7d']} "
+                    f"({summary['fresh_pct']}%)"
+                )
+                c3.metric(
+                    "With Price",
+                    summary["with_price"]
+                )
+                c4.metric(
+                    "With Analyst Data",
+                    summary["with_analyst_data"]
+                )
+
+            if st.button("▶ Run Sanity Checks"):
+                with st.spinner("Running checks..."):
+                    results = run_sanity_checks()
+
+                if results["overall"] == "PASS":
+                    st.success(
+                        f"✅ All {results['pass_count']}"
+                        f" checks passed"
+                    )
+                else:
+                    st.error(
+                        f"❌ {results['issue_count']} "
+                        f"issues found"
+                    )
+
+                if results["issues"]:
+                    st.markdown("#### Issues")
+                    for issue in results["issues"]:
+                        icon = (
+                            "🔴" if issue["severity"]
+                            =="high" else
+                            "🟡" if issue["severity"]
+                            =="medium" else "🔵"
+                        )
+                        st.markdown(
+                            f"{icon} **{issue['check']}**"
+                            f" — {issue['count']} cases"
+                        )
+                        for ex in issue.get(
+                            "examples",[]
+                        ):
+                            st.caption(f"  → {ex}")
+
+                st.markdown("#### Passed")
+                for p in results["passed"]:
+                    st.caption(f"✅ {p}")
+        except ImportError:
+            st.warning(
+                "Quality checks module not found. "
+                "Run: "
+                "python src/data/quality_checks.py"
+            )
+
+    # ── Tab 2: Answer Quality ─────────────────────────
+    with tab2:
+        st.markdown("### ⭐ SQL Answer Quality")
+
+        judge = get_judge()
+        if judge:
+            stats = judge.get_stats()
+            if stats and stats.get("total",0) > 0:
+                c1,c2,c3,c4 = st.columns(4)
+                c1.metric("Evaluated",
+                          stats.get("total",0))
+                c2.metric("Avg Score",
+                          f"{stats.get('avg_score',0):.0%}")
+                c3.metric("Pass Rate",
+                          f"{stats.get('pass_rate',0)}%")
+                c4.metric("Fails",
+                          stats.get("fails",0))
+
+                recent = judge.get_recent_evals(20)
+                if recent:
+                    st.markdown("#### Recent Evaluations")
+                    st.dataframe(
+                        pd.DataFrame(recent),
+                        use_container_width=True
+                    )
+            else:
+                st.info(
+                    "No evaluations yet. "
+                    "Ask questions on Ask Anything."
+                )
+
+    # ── Tab 3: User Feedback ──────────────────────────
+    with tab3:
+        st.markdown("### 💬 User Feedback")
+
+        try:
+            from src.data.feedback import (
+                get_feedback_stats,
+                get_negative_feedback
+            )
+            fb = get_feedback_stats()
+            if fb and fb.get("total",0) > 0:
+                c1,c2,c3 = st.columns(3)
+                c1.metric("Total",  fb["total"])
+                c2.metric(
+                    "👍 Positive",
+                    f"{fb['positive']} "
+                    f"({fb['positive_pct']}%)"
+                )
+                c3.metric("👎 Negative", fb["negative"])
+
+                negatives = get_negative_feedback(20)
+                if negatives:
+                    st.markdown(
+                        "#### Questions to Improve"
+                    )
+                    for n in negatives:
+                        with st.expander(
+                            f"{n['time']} — "
+                            f"{n['question'][:50]}"
+                        ):
+                            st.code(
+                                n["sql"],
+                                language="sql"
+                            )
+                            if n["comment"]:
+                                st.caption(
+                                    f"Comment: "
+                                    f"{n['comment']}"
+                                )
+                            st.caption(
+                                f"Returned "
+                                f"{n['row_count']} rows"
+                            )
+            else:
+                st.info(
+                    "No feedback yet. "
+                    "Use 👍/👎 on Ask Anything page."
+                )
+        except ImportError:
+            st.warning("Feedback module not found.")
